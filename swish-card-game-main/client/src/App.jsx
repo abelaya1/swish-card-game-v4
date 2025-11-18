@@ -268,7 +268,9 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif", padding: 20 }}>
-      <h1>Swish Prototype (Week 10-11 – UI Polish & Bug Fixes)</h1>
+{!state?.phase && (
+  <h1>Swish Prototype W13 - Deployed Game to Heroku + netlify</h1>
+)}
 
 {state?.phase === "gameover" && (
   <div
@@ -292,22 +294,26 @@ export default function App() {
 )}
 
 
-      {!joined && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <input
-            value={roomCode}
-            onChange={(e) => setRoomCode(e.target.value)}
-            placeholder="Room code"
-          />
-          <button onClick={createRoom}>Create Room</button>
-          <button onClick={joinRoom}>Join Room</button>
-        </div>
-      )}
+{!state?.phase && !joined && (
+  <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+    <input
+      value={roomCode}
+      onChange={(e) => setRoomCode(e.target.value)}
+      placeholder="Room code"
+    />
+    <button onClick={createRoom}>Create Room</button>
+    <button onClick={joinRoom}>Join Room</button>
+  </div>
+)}
 
-      <div style={{ marginBottom: 12 }}>
-        <strong>Room:</strong> {roomCode} &nbsp; | &nbsp;
-        <strong>Players:</strong> {players.join(", ") || "—"}
-      </div>
+
+{!state?.phase && (
+  <div style={{ marginBottom: 12 }}>
+    <strong>Room:</strong> {roomCode} &nbsp; | &nbsp;
+    <strong>Players:</strong> {players.join(", ") || "—"}
+  </div>
+)}
+
 
       <div style={{ display: "flex", gap: 24 }}>
         {/* LEFT COLUMN: Controls + Game Log */}
