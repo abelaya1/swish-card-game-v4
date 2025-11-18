@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
 
 // Prefer env; fall back to same-origin
-const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL ||
-  (typeof window !== "undefined"
-    ? `${window.location.origin}`.replace(/\/$/, "")
-    : "http://localhost:3001");
+import { io } from "socket.io-client";
+
+const SOCKET_URL = "https://swish-card-game-server-abel-f41b169b53e5.herokuapp.com";
 
 const socket = io(SOCKET_URL, { transports: ["websocket"], reconnection: true });
 
