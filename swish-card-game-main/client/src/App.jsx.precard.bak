@@ -1,0 +1,232 @@
+import { useEffect, useState } from "react";
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:3001");
+
+export default function App() {
+  const [roomCode, setRoomCode] = useState("ROOM1");
+  const [joined, setJoined] = useState(false);
+  const [players, setPlayers] = useState([]);
+  const [state, setState] = useState(null);
+  const [me, setMe] = useState(null); // socket.id
+  const [selected, setSelected] = useState(new Set()); // multi-select
+
+  useEffect(() => {
+    socket.on("connect", () => setMe(socket.id));
+    socket.on("welcome", (msg) => console.log(msg));
+    socket.on("roomUpdate", (ids) => setPlayers(ids));
+    socket.on("state", (s) => setState({ ...s })); // shallow clone for React
+
+    return () => {
+      socket.off("connect");
+      socket.off("welcome");
+      socket.off("roomUpdate");
+      socket.off("state");
+    };
+  }, []);
+
+  const createRoom = () => {
+    socket.emit("createRoom", roomCode, (res) => {
+      if (!res.ok) return alert(res.error);
+      setJoined(true);
+    });
+  };
+
+  const joinRoom = () => {
+    socket.emit("joinRoom", roomCode, (res) => {
+      if (!res.ok) return alert(res.error);
+      setJoined(true);
+    });
+  };
+
+  const startGame = () => {
+    socket.emit("startGame", roomCode, (res) => {
+      if (!res.ok) return alert(res.error);
+      setState(res.state);
+      setSelected(new Set());
+    });
+  };
+
+  // Single-card play (used for double-click quick play)
+  const playOne = (cardId) => {
+    socket.emit("playCard", roomCode, cardId, (res) => {
+      if (!res.ok) return alert(res.error);
+      setSelected(new Set());
+      setState({ ...res.state });
+    });
+  };
+
+  // Multi-card play (array of IDs, same-rank)
+  const playSelected = () => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    socket.emit("playCard", roomCode, ids, (res) => {
+      if (!res.ok) return alert(res.error);
+      setSelected(new Set());
+      setState({ ...res.state });
+    });
+  };
+
+  // Toggle selection for a card in hand
+  const toggle = (cardId) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(cardId) ? next.delete(cardId) : next.add(cardId);
+      return next;
+    });
+  };
+
+  // Utility: select all of the same rank as the first selected card
+  const selectSameRank = () => {
+    const hand = myHand;
+    if (hand.length === 0 || selected.size === 0) return;
+    const firstId = selected.values().next().value;
+    const firstCard = hand.find((c) => c.id === firstId);
+    if (!firstCard) return;
+    const rank = firstCard.rank;
+    const next = new Set(hand.filter((c) => c.rank === rank).map((c) => c.id));
+    setSelected(next);
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
+  const myHand = state?.players?.[me]?.hand || [];
+  const active = state?.activePlayer === me;
+
+  // Compute top-of-discard safely for rendering
+  const top =
+    state?.discard && state.discard.length > 0
+      ? state.discard[state.discard.length - 1]
+      : null;
+
+  // Derive a friendly selected summary
+  const selectedCards = myHand.filter((c) => selected.has(c.id));
+  const selectedRank =
+    selectedCards.length > 0
+      ? selectedCards.every((c) => c.rank === selectedCards[0].rank)
+        ? selectedCards[0].rank
+        : "mixed"
+      : null;
+
+  return (
+    <div style={{ fontFamily: "Arial, sans-serif", padding: 20 }}>
+      <h1>Swish Prototype (Week 8 – AI Integration)</h1>
+
+      {!joined && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <input
+            value={roomCode}
+            onChange={(e) => setRoomCode(e.target.value)}
+            placeholder="Room code"
+          />
+          <button onClick={createRoom}>Create Room</button>
+          <button onClick={joinRoom}>Join Room</button>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 12 }}>
+        <strong>Room:</strong> {roomCode} &nbsp; | &nbsp;
+        <strong>Players:</strong> {players.join(", ") || "—"}
+      </div>
+
+      <div style={{ display: "flex", gap: 24 }}>
+        {/* Controls */}
+        <div>
+          <h3>Controls</h3>
+          <button onClick={startGame} disabled={!joined}>
+            Start Game
+          </button>
+
+          <div style={{ marginTop: 8 }}>
+            <strong>Your ID:</strong> {me || "—"}
+          </div>
+
+          <div>
+            <strong>Active Player:</strong>{" "}
+            {state?.activePlayer === "AI"
+              ? "AI"
+              : state?.activePlayer === me
+              ? "You"
+              : state?.activePlayer || "—"}
+          </div>
+
+          {/* Selection controls */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ marginBottom: 6 }}>
+              <strong>Selected:</strong>{" "}
+              {selected.size === 0
+                ? "(none)"
+                : `${selected.size} ${selectedRank ? `(${selectedRank})` : ""}`}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                onClick={playSelected}
+                disabled={!active || selected.size === 0}
+                title="Play all selected cards"
+              >
+                Play Selected
+              </button>
+              <button
+                onClick={selectSameRank}
+                disabled={!active || selected.size === 0}
+                title="Select all cards in your hand with the same rank as one selected card"
+              >
+                Select Same Rank
+              </button>
+              <button
+                onClick={clearSelection}
+                disabled={selected.size === 0}
+                title="Clear selection"
+              >
+                Clear Selection
+              </button>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 12, color: "#555" }}>
+              Tip: <em>Click</em> to select/deselect; <em>double-click</em> a
+              card to play just that one quickly.
+            </div>
+          </div>
+        </div>
+
+        {/* Hand + Discard */}
+        <div>
+          <h3>Your Hand</h3>
+          {myHand.length === 0 ? (
+            <div>(empty)</div>
+          ) : (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {myHand.map((card) => {
+                const isSel = selected.has(card.id);
+                const suitColor = (card.suit === '♥' || card.suit === '♦') ? '#c40000' : '#111';
+                return (
+                  <button
+                    key={card.id}
+                    onClick={() => (active ? toggle(card.id) : null)}
+                    onDoubleClick={() => (active ? playOne(card.id) : null)}
+                    disabled={!active}
+                    title={`${card.rank}${card.suit}`}
+                    style={{
+                      padding: "6px 10px",
+                      cursor: active ? "pointer" : "default",
+                      border: isSel ? "2px solid #2ecc71" : "1px solid #ccc",
+                      borderRadius: 6,
+                      boxShadow: isSel ? "0 0 6px rgba(46,204,113,.6)" : "none",
+                      background: "#fff", color: suitColor, fontSize: 20, fontWeight: 700,
+                    }}
+                  >
+                    {`${card.rank}${card.suit}`}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <h3 style={{ marginTop: 16 }}>Discard Top</h3>
+          <div style={{ minHeight: 24 }}>
+            {top ? `${top.rank}${top.suit}` : "(empty)"}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
