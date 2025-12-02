@@ -260,6 +260,17 @@ export default function App() {
 
   const openTutorial = () => setScreen("tutorial");
 
+  const handleQuitToMenu = () => {
+  // Reset client-side state and go back to the home screen
+  setState(null);
+  setSelected(new Set());
+  setJoined(false);
+  setPlayers([]);
+  setMode(null);
+  setScreen("home");
+};
+
+
 
   const canPlayFacedown =
     state &&
@@ -328,62 +339,64 @@ export default function App() {
     return <TutorialScreen onBack={goHome} />;
   }
 
+  // ====== IN-GAME UI ======
   return (
     <div style={{ fontFamily: "Arial, sans-serif", padding: 20 }}>
-{!state?.phase && (
-  <h1>Swish Prototype W13 - Deployed Game to Heroku + netlify</h1>
-)}
+      {/* Top bar: title + quit button */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 28 }}>Swish</h1>
 
-{state?.phase === "gameover" && (
-  <div
-    style={{
-      margin: "12px 0",
-      padding: "10px 14px",
-      borderRadius: 8,
-      background: "rgba(46, 204, 113, .12)",
-      border: "1px solid rgba(46, 204, 113, .4)",
-      fontSize: 18,
-      fontWeight: "bold",
-    }}
-  >
-    Game Over:&nbsp;
-    {state.winner === me
-      ? "You win!"
-      : state.winner === "AI"
-      ? "AI wins!"
-      : `Player ${state.winner?.slice(0, 4) || "Unknown"} wins!`}
-  </div>
-)}
+        <button
+          onClick={handleQuitToMenu}
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: "none",
+            background: "#374151",
+            color: "#e5e7eb",
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: "pointer",
+          }}
+        >
+          Quit to Main Menu
+        </button>
+      </div>
 
-
-{!state?.phase && !joined && (
-  <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-    <input
-      value={roomCode}
-      onChange={(e) => setRoomCode(e.target.value)}
-      placeholder="Room code"
-    />
-    <button onClick={createRoom}>Create Room</button>
-    <button onClick={joinRoom}>Join Room</button>
-  </div>
-)}
-
-
-{!state?.phase && (
-  <div style={{ marginBottom: 12 }}>
-    <strong>Room:</strong> {roomCode} &nbsp; | &nbsp;
-    <strong>Players:</strong> {players.join(", ") || "—"}
-  </div>
-)}
-
+      {/* Game over banner */}
+      {state?.phase === "gameover" && (
+        <div
+          style={{
+            margin: "12px 0",
+            padding: "10px 14px",
+            borderRadius: 8,
+            background: "rgba(46, 204, 113, .12)",
+            border: "1px solid rgba(46, 204, 113, .4)",
+            fontSize: 18,
+            fontWeight: "bold",
+          }}
+        >
+          Game Over:&nbsp;
+          {state.winner === me
+            ? "You win!"
+            : state.winner === "AI"
+            ? "AI wins!"
+            : `Player ${state.winner?.slice(0, 4) || "Unknown"} wins!`}
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 24 }}>
         {/* LEFT COLUMN: Controls + Game Log */}
         <div style={{ minWidth: 320 }}>
           <h3>Controls</h3>
-          <button onClick={startGame} disabled={!joined}>
-            Start Game
-          </button>
+          {/* Start Game button REMOVED from UI on purpose */}
 
           <div style={{ marginTop: 8 }}>
             <strong>Your ID:</strong> {me || "—"}
@@ -404,7 +417,9 @@ export default function App() {
               <strong>Selected:</strong>{" "}
               {selected.size === 0
                 ? "(none)"
-                : `${selected.size} ${selectedRank ? `(${selectedRank})` : ""}`}
+                : `${selected.size} ${
+                    selectedRank ? `(${selectedRank})` : ""
+                  }`}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
@@ -452,12 +467,21 @@ export default function App() {
             >
               {state?.log?.length ? (
                 state.log.map((e, idx) => (
-                  <div key={e.t ?? idx} style={{ fontSize: 13, lineHeight: "18px", marginBottom: 4 }}>
+                  <div
+                    key={e.t ?? idx}
+                    style={{
+                      fontSize: 13,
+                      lineHeight: "18px",
+                      marginBottom: 4,
+                    }}
+                  >
                     {humanizeMsg(e.msg)}
                   </div>
                 ))
               ) : (
-                <div style={{ color: "#777", fontSize: 12 }}>(no events yet)</div>
+                <div style={{ color: "#777", fontSize: 12 }}>
+                  (no events yet)
+                </div>
               )}
             </div>
           </div>
@@ -486,11 +510,17 @@ export default function App() {
             </div>
           )}
 
-          {/* Facedown grid (visible if you have facedown cards) */}
+          {/* Facedown grid */}
           {myFace.length > 0 && (
             <div style={{ marginTop: 16 }}>
               <h3>Facedown</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 76px)", gap: 8 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 76px)",
+                  gap: 8,
+                }}
+              >
                 {myFace.map((col, r) =>
                   col.map((card, c) => (
                     <FacedownSlot
@@ -502,12 +532,13 @@ export default function App() {
                 )}
               </div>
               <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>
-                Playable when your hand is empty and the deck is gone. Click one slot to flip & try.
+                Playable when your hand is empty and the deck is gone. Click
+                one slot to flip &amp; try.
               </div>
             </div>
           )}
 
-          {/* Bottom row: Discard pile (left) + Draw deck (right) */}
+          {/* Discard + Deck row */}
           <div
             style={{
               display: "flex",
@@ -522,24 +553,67 @@ export default function App() {
             <div>
               <h3 style={{ marginBottom: 8 }}>Discard Pile</h3>
               <div style={{ position: "relative", width: 72, height: 104 }}>
-                <CardBack style={{ position: "absolute", top: 8, left: 8, transform: "rotate(-2deg)", opacity: 0.35 }} />
-                <CardBack style={{ position: "absolute", top: 4, left: 4, transform: "rotate(2deg)", opacity: 0.5 }} />
+                <CardBack
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    left: 8,
+                    transform: "rotate(-2deg)",
+                    opacity: 0.35,
+                  }}
+                />
+                <CardBack
+                  style={{
+                    position: "absolute",
+                    top: 4,
+                    left: 4,
+                    transform: "rotate(2deg)",
+                    opacity: 0.5,
+                  }}
+                />
                 <div style={{ position: "absolute", top: 0, left: 0 }}>
                   {top ? <Card card={top} disabled={true} /> : <CardBack />}
                 </div>
               </div>
               <div style={{ marginTop: 6, fontSize: 12, color: "#555" }}>
-                {state?.discard?.length ? `${state.discard.length} in pile` : "(empty)"}
+                {state?.discard?.length
+                  ? `${state.discard.length} in pile`
+                  : "(empty)"}
               </div>
             </div>
 
             {/* Draw deck */}
             <div style={{ textAlign: "right" }}>
               <h3 style={{ marginBottom: 8 }}>Draw Deck</h3>
-              <div style={{ position: "relative", width: 72, height: 104, marginLeft: "auto" }}>
-                <CardBack style={{ position: "absolute", top: 6, left: 6, transform: "rotate(2deg)", opacity: 0.5 }} />
-                <CardBack style={{ position: "absolute", top: 3, left: 3, transform: "rotate(-2deg)", opacity: 0.75 }} />
-                <CardBack style={{ position: "absolute", top: 0, left: 0 }} />
+              <div
+                style={{
+                  position: "relative",
+                  width: 72,
+                  height: 104,
+                  marginLeft: "auto",
+                }}
+              >
+                <CardBack
+                  style={{
+                    position: "absolute",
+                    top: 6,
+                    left: 6,
+                    transform: "rotate(2deg)",
+                    opacity: 0.5,
+                  }}
+                />
+                <CardBack
+                  style={{
+                    position: "absolute",
+                    top: 3,
+                    left: 3,
+                    transform: "rotate(-2deg)",
+                    opacity: 0.75,
+                  }}
+                />
+                <CardBack
+                  style={{ position: "absolute", top: 0, left: 0 }}
+                />
               </div>
               <div style={{ marginTop: 6, fontSize: 14 }}>
                 <strong>{deckCount}</strong> left
