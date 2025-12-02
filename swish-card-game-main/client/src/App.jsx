@@ -130,42 +130,36 @@ function FacedownSlot({ enabled, onClick }) {
 
 export default function App() {
   const [roomCode, setRoomCode] = useState("ROOM1");
-  const [joined, setJoined] = useState(false);
-  const [players, setPlayers] = useState([]);
   const [state, setState] = useState(null);
-  const [me, setMe] = useState(null); // socket.id
+  const [me, setMe] = useState(null);                 // socket.id
   const [selected, setSelected] = useState(new Set()); // multi-select
   const [logRef, setLogRef] = useState(null);
-  const [screen, setScreen] = useState("home"); // 'home' | 'loading' | 'tutorial' | 'game'
-  const [mode, setMode] = useState(null);       // 'single' | 'multi'
+  const [screen, setScreen] = useState("home");       // 'home' | 'loading' | 'tutorial' | 'game'
 
+  // --- Socket listeners ---
   useEffect(() => {
     socket.on("connect", () => setMe(socket.id));
     socket.on("welcome", (msg) => console.log(msg));
-    socket.on("roomUpdate", (ids) => setPlayers(ids));
     socket.on("state", (s) => setState({ ...s })); // shallow clone for React
 
     socket.on("matchFound", ({ roomId }) => {
       console.log("Matched in room:", roomId);
       setRoomCode(roomId);
-      setJoined(true);
       setScreen("game");
 
-  // auto-start the multiplayer game
-    socket.emit("startGame", roomId, (res) => {
-      if (!res?.ok) {
-        alert(res?.error || "Failed to start game");
-        return;
-      }
-    setState({ ...res.state });
-  });
-});
-
+      // auto-start the multiplayer game
+      socket.emit("startGame", roomId, (res) => {
+        if (!res?.ok) {
+          alert(res?.error || "Failed to start game");
+          return;
+        }
+        setState({ ...res.state });
+      });
+    });
 
     return () => {
       socket.off("connect");
       socket.off("welcome");
-      socket.off("roomUpdate");
       socket.off("state");
       socket.off("matchFound");
     };
@@ -176,28 +170,6 @@ export default function App() {
     if (!state?.log || !logRef) return;
     logRef.scrollTop = logRef.scrollHeight;
   }, [state?.log, logRef]);
-
-  const createRoom = () => {
-    socket.emit("createRoom", roomCode, (res) => {
-      if (!res.ok) return alert(res.error);
-      setJoined(true);
-    });
-  };
-
-  const joinRoom = () => {
-    socket.emit("joinRoom", roomCode, (res) => {
-      if (!res.ok) return alert(res.error);
-      setJoined(true);
-    });
-  };
-
-  const startGame = () => {
-    socket.emit("startGame", roomCode, (res) => {
-      if (!res.ok) return alert(res.error);
-      setState(res.state);
-      setSelected(new Set());
-    });
-  };
 
   // Single-card play (double-click quick play)
   const playOne = (cardId) => {
@@ -246,74 +218,57 @@ export default function App() {
   const myFace = state?.players?.[me]?.facedown || [];
   const active = state?.activePlayer === me;
 
-    // ====== SCREEN NAVIGATION ======
+  // ====== SCREEN NAVIGATION ======
   const goHome = () => {
     setScreen("home");
-    setJoined(false);
     setState(null);
     setSelected(new Set());
-    setPlayers([]);
   };
 
-
   const startSinglePlayer = () => {
-    setMode("single");
+    // use a room id based on your socket id so it’s unique
+    const code = `SP-${(me || socket.id || "ROOM").slice(0, 4)}`;
+    setRoomCode(code);
 
-  // use a room id based on your socket id so it’s unique
-  const code = `SP-${(me || socket.id || "ROOM").slice(0, 4)}`;
-  setRoomCode(code);
-
-  // 1) create room
-  socket.emit("createRoom", code, (res) => {
-    if (!res?.ok) {
-      alert(res?.error || "Failed to create room");
-      return;
-    }
-
-    setJoined(true);
-    setScreen("game");
-
-    // 2) immediately start the game (server will add AI + randomize first player)
-    socket.emit("startGame", code, (res2) => {
-      if (!res2?.ok) {
-        alert(res2?.error || "Failed to start game");
+    // 1) create room
+    socket.emit("createRoom", code, (res) => {
+      if (!res?.ok) {
+        alert(res?.error || "Failed to create room");
         return;
       }
-      setState({ ...res2.state });
+
+      setScreen("game");
+
+      // 2) immediately start the game (server will add AI + randomize first player)
+      socket.emit("startGame", code, (res2) => {
+        if (!res2?.ok) {
+          alert(res2?.error || "Failed to start game");
+          return;
+        }
+        setState({ ...res2.state });
+      });
     });
-  });
-};
+  };
 
-
-const startMultiplayer = () => {
-  setMode("multi");
-  setScreen("loading");
-
-  // tell the server we want to be matched
-  socket.emit("quickMatch");
-};
-
+  const startMultiplayer = () => {
+    setScreen("loading");
+    // tell the server we want to be matched
+    socket.emit("quickMatch");
+  };
 
   const cancelMatchmaking = () => {
-    socket.emit("cancelQuickMatch");  // tell server to clear waitingPlayer
-    setScreen("home");                // return user to home page
-};
-
-
+    socket.emit("cancelQuickMatch"); // tell server to clear waitingPlayer
+    setScreen("home");               // return user to home page
+  };
 
   const openTutorial = () => setScreen("tutorial");
 
   const handleQuitToMenu = () => {
-  // Reset client-side state and go back to the home screen
-  setState(null);
-  setSelected(new Set());
-  setJoined(false);
-  setPlayers([]);
-  setMode(null);
-  setScreen("home");
-};
-
-
+    // Reset client-side state and go back to the home screen
+    setState(null);
+    setSelected(new Set());
+    setScreen("home");
+  };
 
   const canPlayFacedown =
     state &&
@@ -335,7 +290,9 @@ const startMultiplayer = () => {
     if (!state) return msg;
     let out = msg;
     if (me) out = out.replaceAll(me, "You");
-    const others = (state.turnOrder || []).filter((id) => id !== "AI" && id !== me);
+    const others = (state.turnOrder || []).filter(
+      (id) => id !== "AI" && id !== me
+    );
     for (const oid of others) out = out.replaceAll(oid, "Opponent");
     return out;
   };
@@ -357,8 +314,7 @@ const startMultiplayer = () => {
         : "mixed"
       : null;
 
-    // ====== RENDER BY SCREEN ======
-
+  // ====== RENDER BY SCREEN ======
   if (screen === "home") {
     return (
       <HomeScreen
@@ -370,12 +326,7 @@ const startMultiplayer = () => {
   }
 
   if (screen === "loading") {
-    // you can wire this later when you add real matchmaking
-    return (
-      <LoadingScreen
-        onCancel={cancelMatchmaking}
-      />
-    );
+    return <LoadingScreen onCancel={cancelMatchmaking} />;
   }
 
   if (screen === "tutorial") {
@@ -396,6 +347,30 @@ const startMultiplayer = () => {
       >
         <h1 style={{ margin: 0, fontSize: 28 }}>Swish</h1>
 
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "8px 14px",
+            borderRadius: 999,
+            display: "inline-block",
+            background: active
+              ? "rgba(46, 204, 113, 0.15)"
+              : "rgba(52, 152, 219, 0.15)",
+            border: `1px solid ${
+              active
+                ? "rgba(46, 204, 113, 0.5)"
+                : "rgba(52, 152, 219, 0.5)"
+            }`,
+            fontSize: 14,
+          }}
+        >
+          {active
+            ? "Your turn"
+            : state?.activePlayer === "AI"
+            ? "AI is thinking..."
+            : "Opponent's turn"}
+        </div>
+
         <button
           onClick={handleQuitToMenu}
           style={{
@@ -415,23 +390,41 @@ const startMultiplayer = () => {
 
       {/* Game over banner */}
       {state?.phase === "gameover" && (
-        <div
-          style={{
-            margin: "12px 0",
-            padding: "10px 14px",
-            borderRadius: 8,
-            background: "rgba(46, 204, 113, .12)",
-            border: "1px solid rgba(46, 204, 113, .4)",
-            fontSize: 18,
-            fontWeight: "bold",
-          }}
-        >
-          Game Over:&nbsp;
-          {state.winner === me
-            ? "You win!"
-            : state.winner === "AI"
-            ? "AI wins!"
-            : `Player ${state.winner?.slice(0, 4) || "Unknown"} wins!`}
+        <div style={{ margin: "12px 0", textAlign: "center" }}>
+          <div
+            style={{
+              display: "inline-block",
+              padding: "10px 16px",
+              borderRadius: 8,
+              background: "rgba(46, 204, 113, .12)",
+              border: "1px solid rgba(46, 204, 113, .4)",
+              fontSize: 18,
+              fontWeight: "bold",
+              marginBottom: 8,
+            }}
+          >
+            Game Over:&nbsp;
+            {state.winner === me
+              ? "You win!"
+              : state.winner === "AI"
+              ? "AI wins!"
+              : `Player ${state.winner?.slice(0, 4) || "Unknown"} wins!`}
+          </div>
+          <div>
+            <button
+              onClick={() => {
+                setState(null);
+                setSelected(new Set());
+                socket.emit("startGame", roomCode, (res) => {
+                  if (!res?.ok)
+                    return alert(res?.error || "Failed to restart game");
+                  setState({ ...res.state });
+                });
+              }}
+            >
+              Play Again
+            </button>
+          </div>
         </div>
       )}
 
@@ -439,7 +432,6 @@ const startMultiplayer = () => {
         {/* LEFT COLUMN: Controls + Game Log */}
         <div style={{ minWidth: 320 }}>
           <h3>Controls</h3>
-          {/* Start Game button REMOVED from UI on purpose */}
 
           <div style={{ marginTop: 8 }}>
             <strong>Your ID:</strong> {me || "—"}
@@ -546,7 +538,9 @@ const startMultiplayer = () => {
                     selected={isSel}
                     disabled={!active}
                     onClick={() => (active ? toggle(card.id) : null)}
-                    onDoubleClick={() => (active ? playOne(card.id) : null)}
+                    onDoubleClick={() =>
+                      active ? playOne(card.id) : null
+                    }
                   />
                 );
               })}
@@ -575,8 +569,8 @@ const startMultiplayer = () => {
                 )}
               </div>
               <div style={{ marginTop: 6, fontSize: 12, color: "#777" }}>
-                Playable when your hand is empty and the deck is gone. Click
-                one slot to flip &amp; try.
+                Playable when your hand is empty and the deck is gone.
+                Click one slot to flip &amp; try.
               </div>
             </div>
           )}
@@ -654,9 +648,7 @@ const startMultiplayer = () => {
                     opacity: 0.75,
                   }}
                 />
-                <CardBack
-                  style={{ position: "absolute", top: 0, left: 0 }}
-                />
+                <CardBack style={{ position: "absolute", top: 0, left: 0 }} />
               </div>
               <div style={{ marginTop: 6, fontSize: 14 }}>
                 <strong>{deckCount}</strong> left
@@ -668,3 +660,4 @@ const startMultiplayer = () => {
     </div>
   );
 }
+
