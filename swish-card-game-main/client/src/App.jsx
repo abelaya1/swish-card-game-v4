@@ -150,7 +150,17 @@ export default function App() {
       setRoomCode(roomId);
       setJoined(true);
       setScreen("game");
+
+  // auto-start the multiplayer game
+    socket.emit("startGame", roomId, (res) => {
+      if (!res?.ok) {
+        alert(res?.error || "Failed to start game");
+        return;
+      }
+    setState({ ...res.state });
   });
+});
+
 
     return () => {
       socket.off("connect");
@@ -237,24 +247,57 @@ export default function App() {
   const active = state?.activePlayer === me;
 
     // ====== SCREEN NAVIGATION ======
-  const goHome = () => setScreen("home");
+  const goHome = () => {
+    setScreen("home");
+    setJoined(false);
+    setState(null);
+    setSelected(new Set());
+    setPlayers([]);
+  };
+
 
   const startSinglePlayer = () => {
     setMode("single");
-    setRoomCode("ROOM1");    // you can change this if you want a special AI room
+
+  // use a room id based on your socket id so it’s unique
+  const code = `SP-${(me || socket.id || "ROOM").slice(0, 4)}`;
+  setRoomCode(code);
+
+  // 1) create room
+  socket.emit("createRoom", code, (res) => {
+    if (!res?.ok) {
+      alert(res?.error || "Failed to create room");
+      return;
+    }
+
+    setJoined(true);
     setScreen("game");
-    // optional: auto-create/join/start here later
-  };
 
-  const startMultiplayer = () => {
-    setMode("multi");
-    setScreen("loading");
-  };
+    // 2) immediately start the game (server will add AI + randomize first player)
+    socket.emit("startGame", code, (res2) => {
+      if (!res2?.ok) {
+        alert(res2?.error || "Failed to start game");
+        return;
+      }
+      setState({ ...res2.state });
+    });
+  });
+};
 
-    const cancelMatchmaking = () => {
-  socket.emit("cancelQuickMatch");  // tell server to clear waitingPlayer
-  setScreen("home");                // return user to home page
-  };
+
+const startMultiplayer = () => {
+  setMode("multi");
+  setScreen("loading");
+
+  // tell the server we want to be matched
+  socket.emit("quickMatch");
+};
+
+
+  const cancelMatchmaking = () => {
+    socket.emit("cancelQuickMatch");  // tell server to clear waitingPlayer
+    setScreen("home");                // return user to home page
+};
 
 
 
