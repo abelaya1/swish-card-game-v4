@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 
 // Prefer env; fall back to same-origin
 import { io } from "socket.io-client";
+import HomeScreen from "./components/HomeScreen";
+import LoadingScreen from "./components/LoadingScreen";
+import TutorialScreen from "./components/TutorialScreen";
 
 const SOCKET_URL = "https://swish-card-game-server-abel-f41b169b53e5.herokuapp.com";
 
@@ -132,8 +135,9 @@ export default function App() {
   const [state, setState] = useState(null);
   const [me, setMe] = useState(null); // socket.id
   const [selected, setSelected] = useState(new Set()); // multi-select
-
   const [logRef, setLogRef] = useState(null);
+  const [screen, setScreen] = useState("home"); // 'home' | 'loading' | 'tutorial' | 'game'
+  const [mode, setMode] = useState(null);       // 'single' | 'multi'
 
   useEffect(() => {
     socket.on("connect", () => setMe(socket.id));
@@ -141,11 +145,19 @@ export default function App() {
     socket.on("roomUpdate", (ids) => setPlayers(ids));
     socket.on("state", (s) => setState({ ...s })); // shallow clone for React
 
+    socket.on("matchFound", ({ roomId }) => {
+      console.log("Matched in room:", roomId);
+      setRoomCode(roomId);
+      setJoined(true);
+      setScreen("game");
+  });
+
     return () => {
       socket.off("connect");
       socket.off("welcome");
       socket.off("roomUpdate");
       socket.off("state");
+      socket.off("matchFound");
     };
   }, []);
 
@@ -224,6 +236,31 @@ export default function App() {
   const myFace = state?.players?.[me]?.facedown || [];
   const active = state?.activePlayer === me;
 
+    // ====== SCREEN NAVIGATION ======
+  const goHome = () => setScreen("home");
+
+  const startSinglePlayer = () => {
+    setMode("single");
+    setRoomCode("ROOM1");    // you can change this if you want a special AI room
+    setScreen("game");
+    // optional: auto-create/join/start here later
+  };
+
+  const startMultiplayer = () => {
+    setMode("multi");
+    setScreen("loading");
+  };
+
+    const cancelMatchmaking = () => {
+  socket.emit("cancelQuickMatch");  // tell server to clear waitingPlayer
+  setScreen("home");                // return user to home page
+  };
+
+
+
+  const openTutorial = () => setScreen("tutorial");
+
+
   const canPlayFacedown =
     state &&
     active &&
@@ -265,6 +302,31 @@ export default function App() {
         ? selectedCards[0].rank
         : "mixed"
       : null;
+
+    // ====== RENDER BY SCREEN ======
+
+  if (screen === "home") {
+    return (
+      <HomeScreen
+        onSingle={startSinglePlayer}
+        onMulti={startMultiplayer}
+        onTutorial={openTutorial}
+      />
+    );
+  }
+
+  if (screen === "loading") {
+    // you can wire this later when you add real matchmaking
+    return (
+      <LoadingScreen
+        onCancel={cancelMatchmaking}
+      />
+    );
+  }
+
+  if (screen === "tutorial") {
+    return <TutorialScreen onBack={goHome} />;
+  }
 
   return (
     <div style={{ fontFamily: "Arial, sans-serif", padding: 20 }}>

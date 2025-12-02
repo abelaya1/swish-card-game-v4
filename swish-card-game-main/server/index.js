@@ -23,6 +23,8 @@ app.get('/', (_req, res) => res.send('Swish server OK'));
 const rooms = new Map();
 // roomCode -> { players: Set<socketId>, state }
 
+let waitingPlayer = null; // socket that is waiting for quickMatch
+
 // --- Auto-pickup helper (used when player has no valid moves) ---
 function autoPickupIfNoMoves(room, playerId) {
   const S = room.state;
@@ -56,13 +58,49 @@ function autoPickupIfNoMoves(room, playerId) {
   return false;
 }
 
-
 // ----------------------------------------------
 // Main socket.io logic
 // ----------------------------------------------
 io.on('connection', (socket) => {
   console.log('A player connected:', socket.id);
   socket.emit('welcome', 'Hello from server!');
+
+    socket.on('quickMatch', () => {
+    // If someone is already waiting, pair them
+    if (waitingPlayer && waitingPlayer.id !== socket.id) {
+      const roomCode = `QM-${waitingPlayer.id.slice(0, 4)}-${socket.id.slice(0, 4)}`;
+
+      // create room with both players
+      rooms.set(roomCode, {
+        players: new Set([waitingPlayer.id, socket.id]),
+        state: null,
+      });
+
+      waitingPlayer.join(roomCode);
+      socket.join(roomCode);
+
+      io.to(roomCode).emit(
+        'roomUpdate',
+        Array.from(rooms.get(roomCode).players)
+      );
+
+      // notify both clients that the match is ready
+      io.to(waitingPlayer.id).emit('matchFound', { roomId: roomCode });
+      io.to(socket.id).emit('matchFound', { roomId: roomCode });
+
+      waitingPlayer = null;
+    } else {
+      // nobody waiting yet — this player becomes the waiting one
+      waitingPlayer = socket;
+      console.log('Player waiting for match:', socket.id);
+    }
+  });
+
+  socket.on('cancelQuickMatch', () => {
+    if (waitingPlayer && waitingPlayer.id === socket.id) {
+      waitingPlayer = null;
+    }
+  });
 
   socket.on('createRoom', (roomCode, ack) => {
     if (rooms.has(roomCode)) return ack?.({ ok:false, error:'Room exists' });
@@ -276,6 +314,11 @@ if (S.activePlayer !== 'AI' && S.activePlayer !== socket.id) {
 
   // keep rooms tidy
   socket.on('disconnect', () => {
+        // if this socket was waiting for a match, clear it
+    if (waitingPlayer && waitingPlayer.id === socket.id) {
+      waitingPlayer = null;
+    }
+
     for (const [code, room] of rooms) {
       if (room.players.delete(socket.id)) {
         io.to(code).emit('roomUpdate', Array.from(room.players));
